@@ -12,5 +12,6 @@
 
 @property (nonatomic, strong) UIImage *image;
 @property (nonatomic, strong) NSString *imagePath;
+@property (nonatomic, assign) BOOL uploaded;
 
 @end

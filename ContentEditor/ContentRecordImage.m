@@ -15,6 +15,7 @@
     if (self) {
         self.image = [UIImage imageNamed:@"placeHolder2.png"];
         self.updated = NO;
+        self.uploaded = NO;
     }
     return self;
 }

@@ -8,6 +8,7 @@
 
 #import "EditContentImageCell.h"
 #import "PureLayout.h"
+#import "UIImageView+AFNetworking.h"
 
 @interface EditContentImageCell ()
 
@@ -58,32 +59,38 @@
     
     
     ContentRecordImage *imageRecord = (ContentRecordImage *)record;
-    UIImage *image = imageRecord.image;
     
     float screenWidth = [UIScreen mainScreen].bounds.size.width - 60;
-    float f = image.size.width / screenWidth;
-    float newWidth = image.size.width / f;
-    float newHeight = image.size.height / f;
-    self.newSize = CGSizeMake(newWidth, newHeight);
-    [self.theImageView autoSetDimensionsToSize:self.newSize];
-    
-    [self.theImageView setImage:image];
-    
+    if (imageRecord.image) {
+        UIImage *image = imageRecord.image;
+        
+        float f = image.size.width / screenWidth;
+        float newWidth = image.size.width / f;
+        float newHeight = image.size.height / f;
+        self.newSize = CGSizeMake(newWidth, newHeight);
+        [self.theImageView autoSetDimensionsToSize:self.newSize];
+        [self.theImageView setImage:image];
+    }else if (imageRecord.imagePath) {
+        
+        [self.theImageView setImageWithURL:[NSURL URLWithString:imageRecord.imagePath] placeholderImage:[UIImage imageNamed:@"loading"]];
+    }else {
+        [self.theImageView setImage:[UIImage imageNamed:@"upload"]];
+    }
 }
 
 /*- (void)setInfo:(NSDictionary *)info {
-    UIImage *image = info[@"content"];
-    self.theImageView.image = image;
-    NSLog(@"Setting imageView");
-    
-    float screenWidth = [UIScreen mainScreen].bounds.size.width - 60;
-    float f = image.size.width / screenWidth;
-    float newWidth = image.size.width / f;
-    float newHeight = image.size.height / f;
-    self.newSize = CGSizeMake(newWidth, newHeight);
-    
-    [self.theImageView setImage:image];
-}*/
+ UIImage *image = info[@"content"];
+ self.theImageView.image = image;
+ NSLog(@"Setting imageView");
+ 
+ float screenWidth = [UIScreen mainScreen].bounds.size.width - 60;
+ float f = image.size.width / screenWidth;
+ float newWidth = image.size.width / f;
+ float newHeight = image.size.height / f;
+ self.newSize = CGSizeMake(newWidth, newHeight);
+ 
+ [self.theImageView setImage:image];
+ }*/
 
 - (void)imageViewTapped {
     [self.contentCellDelegate selectImageForCell:self];
@@ -97,9 +104,9 @@
     
     [self.theImageView autoPinEdgesToSuperviewEdgesWithInsets:UIEdgeInsetsMake(10, 10, 10, 10)];
     //[self.theImageView autoPinEdgeToSuperviewEdge:ALEdgeLeading withInset:10];
-//    [self.theImageView autoPinEdgeToSuperviewEdge:ALEdgeTop withInset:10];
-//    [self.theImageView autoPinEdgeToSuperviewEdge:ALEdgeBottom withInset:10];
-//    [self.theImageView autoAlignAxisToSuperviewAxis:ALAxisHorizontal];
+    //    [self.theImageView autoPinEdgeToSuperviewEdge:ALEdgeTop withInset:10];
+    //    [self.theImageView autoPinEdgeToSuperviewEdge:ALEdgeBottom withInset:10];
+    //    [self.theImageView autoAlignAxisToSuperviewAxis:ALAxisHorizontal];
     
     [super updateConstraints];
 }

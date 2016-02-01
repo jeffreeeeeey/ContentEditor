@@ -7,14 +7,18 @@
 //
 #import <Foundation/Foundation.h>
 #import <CTAssetsPickerController/CTAssetsPickerController.h>
-#import "Settings.h"
 #import "EditContentTableViewController.h"
 #import "PureLayout.h"
-
+#import "Settings.h"
 #import "MBProgressHUD.h"
+//#import "UISwipeGestureRecognizerWithData.h"
+//#import "ImageRecord.h"
+//#import "ImageUploader.h"
+//#import "UploadImageOperations.h"
 #import "ContentRecord.h"
 #import "ContentRecordText.h"
 #import "ContentRecordImage.h"
+#import "Settings.h"
 #import "CLImageEditor.h"
 
 
@@ -32,9 +36,6 @@
 @property (weak, nonatomic) UITextView *currentTextView;
 @property (strong, nonatomic) MBProgressHUD *progressHud;
 @property (nonatomic, strong) PHImageRequestOptions *phImageRequestOptions;
-//@property (nonatomic, strong) ContentDataSource *dataSource;
-
-
 
 @property (nonatomic, assign) IMAGE_ACTION imageAction;
 
@@ -77,7 +78,7 @@
     
     // Uncomment the following line to display an Edit button in the navigation bar for this view controller.
     //self.navigationItem.rightBarButtonItem = self.editButtonItem;
-
+    
     [self.tableView setEditing:NO animated:YES];
     
     [self.navigationController setToolbarHidden:NO];
@@ -91,11 +92,35 @@
     
     //[self addTextContent:nil];
     
-    
     UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(dismissKeyboard)];
     [self.tableView addGestureRecognizer:tapGesture];
     
     //[self addDoneToolBarToKeyboard:self.currentTextView];
+    self.editMode = EditModeUpdate;
+    if (self.editMode == EditModeUpdate /*&& self.eventDic*/) {
+        //NSString *contentString = self.eventDic[@"content"];
+        NSString *contentString = @"[{\"type\":\"html\", \"value\":\"Draft forget\"},{\"type\":\"imgs\", \"value\":[{\"url\":\"http://image.llzg.cn/ufiles/2016/01/28/an/2016-01-28_1453965096610.jpg\"}]},{\"type\":\"imgs\", \"value\":[{\"url\":\"http://image.llzg.cn/ufiles/2016/01/28/an/2016-01-28_1453965098677.jpg\"}]},{\"type\":\"imgs\", \"value\":[{\"url\":\"http://image.llzg.cn/ufiles/2016/01/28/an/2016-01-28_1453965100468.jpg\"}]},{\"type\":\"imgs\", \"value\":[{\"url\":\"http://image.llzg.cn/ufiles/2016/01/28/an/2016-01-28_1453965102268.jpg\"}]},{\"type\":\"imgs\", \"value\":[{\"url\":\"http://image.llzg.cn/ufiles/2016/01/28/an/2016-01-28_1453965103308.jpg\"}]}]";
+        NSData *data = [contentString dataUsingEncoding:NSUTF8StringEncoding];
+        NSError *jsonError;
+        NSArray *contents = (NSArray *)[NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (!jsonError && contents.count > 0) {
+            NSLog(@"contents:%@", contents);
+            for (NSDictionary *content in contents) {
+                if ([content[@"type"] isEqualToString:@"html"]) {
+                    
+                    [self addTextContent:self editMode:EditModeUpdate withContent:content[@"value"]];
+                }else if ([content[@"type"] isEqualToString:@"imgs"]) {
+                    NSArray *images = content[@"value"];
+                    for (NSDictionary *urlDic in images) {
+                        NSString *urlString = urlDic[@"url"];
+                        [self addImageRecord:nil imagePath:urlString];
+                    }
+                }
+            }
+        } else {
+            NSLog(@"json error:%@", jsonError);
+        }
+    }
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -119,7 +144,12 @@
 }
 
 
-- (IBAction)addTextContent:(id)sender {
+- (IBAction)addText:(id)sender {
+    [self addTextContent:nil editMode:EditModeCreate withContent:nil];
+    
+}
+
+- (void)addTextContent:(id)sender editMode:(EditMode)mode withContent:(NSString *)content {
     
     if (self.textViewCount >= MAX_TEXT_COUNT) {
         NSString *message = [NSString stringWithFormat:@"最多添加%d个文字编辑区", MAX_TEXT_COUNT];
@@ -138,18 +168,24 @@
         NSIndexPath *indexPath = [NSIndexPath indexPathForRow:self.contentsArray.count - 1 inSection:0];
         textRecord.indexPath = indexPath;
         
-        [self.tableView beginUpdates];
-        [self.tableView insertRowsAtIndexPaths:[NSArray arrayWithObject:indexPath] withRowAnimation:UITableViewRowAnimationTop];
-        NSInteger row = indexPath.row;
-        [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row-1 inSection:0]] withRowAnimation:UITableViewRowAnimationAutomatic];
-        
-        [self.tableView endUpdates];
-        
-        [self.tableView scrollToRowAtIndexPath:indexPath atScrollPosition:UITableViewScrollPositionTop animated:YES];
-        EditContentTextCell *textCell = (EditContentTextCell *)[self.tableView cellForRowAtIndexPath:indexPath];
-        [textCell.textView becomeFirstResponder];
+        if (mode == EditModeCreate) {
+            [self.tableView beginUpdates];
+            [self.tableView insertRowsAtIndexPaths:[NSArray arrayWithObject:indexPath] withRowAnimation:UITableViewRowAnimationTop];
+            NSInteger row = indexPath.row;
+            [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row-1 inSection:0]] withRowAnimation:UITableViewRowAnimationAutomatic];
+            
+            [self.tableView endUpdates];
+            
+            [self.tableView scrollToRowAtIndexPath:indexPath atScrollPosition:UITableViewScrollPositionTop animated:YES];
+            EditContentTextCell *textCell = (EditContentTextCell *)[self.tableView cellForRowAtIndexPath:indexPath];
+            [textCell.textView becomeFirstResponder];
+        }else if (mode == EditModeUpdate) {
+            textRecord.text = content;
+            textRecord.updated = YES;
+        }
     }
 }
+
 
 - (IBAction)addImageContent:(id)sender {
     
@@ -163,7 +199,7 @@
         [self presentViewController:alert animated:YES completion:nil];
         
     }else {
-
+        
         if (self.currentTextView) {
             [self.currentTextView endEditing:YES];
         }
@@ -217,13 +253,202 @@
         [alert addAction:cancelAction];
         
         [self presentViewController:alert animated:YES completion:nil];
-  
+        
     }
 }
+
+#pragma mark - CTAssetsPickerControllerDelegate
+
+- (BOOL)assetsPickerController:(CTAssetsPickerController *)picker shouldSelectAsset:(PHAsset *)asset {
+    NSInteger max = (MAX_IMAGE_COUNT - self.imageViewCount);
+    
+    // show alert gracefully
+    if (picker.selectedAssets.count >= max)
+    {
+        UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:nil
+                                            message:[NSString stringWithFormat:@"本次最多添加 %ld 张图片，您选择的数量已达到上限", (long)max]
+                                     preferredStyle:UIAlertControllerStyleAlert];
+        
+        UIAlertAction *action =
+        [UIAlertAction actionWithTitle:@"确定"
+                                 style:UIAlertActionStyleDefault
+                               handler:nil];
+        
+        [alert addAction:action];
+        
+        [picker presentViewController:alert animated:YES completion:nil];
+    }
+    
+    // limit selection to max
+    return (picker.selectedAssets.count < max);
+}
+
+- (void)assetsPickerController:(CTAssetsPickerController *)picker didFinishPickingAssets:(NSArray *)assets {
+    [picker dismissViewControllerAnimated:YES completion:^{
+        NSLog(@"Get %lu Assets", assets.count);
+        [self.tableView beginUpdates];
+        for (int i = 0; i < assets.count; i++) {
+            PHAsset *asset = [assets objectAtIndex:i];
+            PHImageManager *manager = [PHImageManager defaultManager];
+            CGSize targetSize = CGSizeMake(asset.pixelWidth, asset.pixelHeight);
+            
+            [manager requestImageForAsset:asset targetSize:targetSize contentMode:PHImageContentModeAspectFit options:self.phImageRequestOptions resultHandler:^(UIImage * image, NSDictionary * _Nullable info) {
+                
+                ContentRecordImage *imageRecord = [self addImageRecord:image imagePath:nil];
+                
+                [self.tableView insertRowsAtIndexPaths:[NSArray arrayWithObject:imageRecord.indexPath] withRowAnimation:UITableViewRowAnimationBottom];
+                
+                //[self.tableView scrollToRowAtIndexPath:indexPath atScrollPosition:UITableViewScrollPositionTop animated:YES];
+            }];
+        }
+        [self.tableView endUpdates];
+        [self.addImageBtn setEnabled:YES];
+    }];
+}
+
+- (ContentRecordImage *)addImageRecord:(UIImage *)image imagePath:(NSString *)imagePath{
+    ContentRecordImage *imageRecord = [[ContentRecordImage alloc]initWithType:ContentTypeImage];
+    if (image) {
+        imageRecord.image = image;
+        imageRecord.uploaded = NO; // Set need to upload when a new image is set.
+    }
+    if (imagePath) {
+        imageRecord.imagePath = imagePath;
+    }
+    
+    imageRecord.updated = YES;
+    
+    [self.contentsArray addObject:imageRecord];
+    
+    self.imageViewCount++;
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:self.contentsArray.count - 1 inSection:0];
+    imageRecord.indexPath = indexPath;
+    
+    return imageRecord;
+}
+
+- (void)assetsPickerControllerDidCancel:(CTAssetsPickerController *)picker {
+    [self dismissViewControllerAnimated:YES completion:^{
+        [self.addImageBtn setEnabled:YES];
+    }];
+}
+
+#pragma mark - ImagePickerDelegate
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
+    if ([info objectForKey:UIImagePickerControllerOriginalImage]) {
+        UIImage* image=[info objectForKey:UIImagePickerControllerOriginalImage];
+        if (self.imageAction == IMAGE_ACTION_ADD) {
+            ContentRecordImage *imageRecord = [[ContentRecordImage alloc]initWithType:ContentTypeImage];
+            imageRecord.image = image;
+            imageRecord.updated = YES;
+            imageRecord.uploaded = NO;
+            
+            [self.contentsArray addObject:imageRecord];
+            
+            self.imageViewCount++;
+            NSIndexPath *indexPath = [NSIndexPath indexPathForRow:self.contentsArray.count - 1 inSection:0];
+            [self dismissViewControllerAnimated:YES completion:^{
+                [self.tableView insertRowsAtIndexPaths:[NSArray arrayWithObject:indexPath] withRowAnimation:UITableViewRowAnimationBottom];
+            }];
+            
+        }else if (self.imageAction == IMAGE_ACTION_EDIT) {
+            ContentRecordImage *imageRecord = [self.contentsArray objectAtIndex:self.indexPath.row];
+            imageRecord.image = image;
+            imageRecord.updated = YES;
+            imageRecord.uploaded = NO;
+            
+            [self dismissViewControllerAnimated:YES completion:^{
+                
+                //[self.tableView beginUpdates];
+                [self.tableView reloadRowsAtIndexPaths:@[self.indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+                
+                //[self.tableView endUpdates];
+                //[self.tableView scrollToRowAtIndexPath:self.indexPath atScrollPosition:UITableViewScrollPositionTop animated:YES];
+            }];
+        }
+        self.imageAction = IMAGE_ACTION_NONE;
+    }
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [self dismissViewControllerAnimated:YES completion:^{
+        self.imageAction = IMAGE_ACTION_NONE;
+    }];
+}
+
 
 /**
  *  Upload Images, set the url to a new array:contentsArrayWithImagePath; Submit content after completion.
  */
+/*- (IBAction)uploadImages {
+    
+    //self.contentsArrayWithImagePath = [NSMutableArray arrayWithArray:self.contentsArray];
+    
+    self.progressHud.mode = MBProgressHUDModeDeterminateHorizontalBar;
+    self.progressHud.labelText = @"准备上传图片";
+    NSMutableArray *records = [[NSMutableArray alloc]initWithCapacity:MAX_IMAGE_COUNT];
+    
+    NSUInteger counter = 0;
+    for (int i = 0; i < self.contentsArray.count; i++) {
+        ContentRecord *contentRecord = self.contentsArray[i];
+        if (contentRecord.type == ContentTypeImage) {
+            ContentRecordImage *contentRecordImage = (ContentRecordImage *)contentRecord;
+            if (contentRecordImage.updated && !contentRecordImage.uploaded && contentRecordImage.image) {
+                UIImage *image = contentRecordImage.image;
+                NSIndexPath *indexPath = [NSIndexPath indexPathForRow:i inSection:0];
+                contentRecordImage.indexPath = indexPath;
+                
+                ImageRecord *record = [[ImageRecord alloc] init];
+                record.image = image;
+                [records addObject:record];
+                
+                // Init uploader with userInfo. i is the index of the dic in the content array. Use this param to update the content after upload image.
+                ImageUploader *uploader = [[ImageUploader alloc]initWithRecord:record atIndex:[NSNumber numberWithInteger:counter] delegate:self userInfo:contentRecordImage.indexPath];
+                if (counter > 0) {
+                    [uploader addDependency:[self.uploadImageOperations.uploadQueue.operations lastObject]];
+                }
+                [self.uploadImageOperations.uploadsInProgress setObject:uploader forKey:[NSString stringWithFormat:@"%lu", counter]];
+                [self.uploadImageOperations.uploadQueue addOperation:uploader];
+                counter++;
+            }
+        }
+    }
+    if (counter == 0) {
+        [self submitContents];
+    }
+}*/
+
+#pragma mark ImageUploaderDelegate
+
+/*- (void)imageUploaderDidGetProgress:(float)progress forUploader:(ImageUploader *)uploader {
+    if (progress) {
+        self.progressHud.labelText = [NSString stringWithFormat:@"正在上传第%ld张图片", [uploader.index integerValue] + 1];
+        self.progressHud.progress = progress;
+    }
+}
+
+- (void)imageUploaderDidFinish:(ImageUploader *)uploader {
+    if ([uploader.record hasURL]) {
+        NSString *imagePath = uploader.record.URL.absoluteString;
+        //NSUInteger m = [(NSNumber *)uploader.info integerValue];
+        NSIndexPath *indexPath = uploader.info;
+        ContentRecordImage *imageRecord = [self.contentsArray objectAtIndex:indexPath.row];
+        imageRecord.imagePath = imagePath;
+        imageRecord.uploaded = YES;
+        
+        int n = uploader.index.intValue;
+        [self.uploadImageOperations.uploadsInProgress removeObjectForKey:[NSString stringWithFormat:@"%d", n]];
+        
+        NSLog(@"upload Image success, index:%@\nRow:%lu\nURL String:%@", uploader.index, imageRecord.indexPath.row ,imagePath);
+    }
+    if (self.uploadImageOperations.uploadQueue.operationCount == 0) {
+        self.progressHud.labelText = @"上传完成";
+        //NSLog(@"After upload, content array:%@", self.contentsArrayWithImagePath);
+        [self submitContents];
+    }
+}*/
 
 
 - (IBAction)submitBtnPressed:(id)sender {
@@ -268,121 +493,93 @@
                 [self deleteRowAtIndexPath:[NSIndexPath indexPathForRow:i inSection:0]];
             }
         }
-    }
-}
-
-#pragma mark - CTAssetsPickerControllerDelegate
-
-- (BOOL)assetsPickerController:(CTAssetsPickerController *)picker shouldSelectAsset:(PHAsset *)asset {
-    NSInteger max = (MAX_IMAGE_COUNT - self.imageViewCount);
-    
-    // show alert gracefully
-    if (picker.selectedAssets.count >= max)
-    {
-        UIAlertController *alert =
-        [UIAlertController alertControllerWithTitle:nil
-                                            message:[NSString stringWithFormat:@"本次最多添加 %ld 张图片，您选择的数量已达到上限", (long)max]
-                                     preferredStyle:UIAlertControllerStyleAlert];
+        //[self.tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0] atScrollPosition:UITableViewScrollPositionTop animated:YES];
         
-        UIAlertAction *action =
-        [UIAlertAction actionWithTitle:@"确定"
-                                 style:UIAlertActionStyleDefault
-                               handler:nil];
+        self.progressHud = [[MBProgressHUD alloc]initWithView:self.tableView.window];
+        [self.tableView.window addSubview:self.progressHud];
+        self.progressHud.dimBackground = YES;
+        [self.progressHud show:YES];
         
-        [alert addAction:action];
-        
-        [picker presentViewController:alert animated:YES completion:nil];
-    }
-    
-    // limit selection to max
-    return (picker.selectedAssets.count < max);
-}
-
-- (void)assetsPickerController:(CTAssetsPickerController *)picker didFinishPickingAssets:(NSArray *)assets {
-    [picker dismissViewControllerAnimated:YES completion:^{
-        NSLog(@"Get %lu Assets", assets.count);
-        [self.tableView beginUpdates];
-        for (int i = 0; i < assets.count; i++) {
-            PHAsset *asset = [assets objectAtIndex:i];
-            PHImageManager *manager = [PHImageManager defaultManager];
-            CGSize targetSize = CGSizeMake(asset.pixelWidth, asset.pixelHeight);
-            
-            [manager requestImageForAsset:asset targetSize:targetSize contentMode:PHImageContentModeAspectFit options:self.phImageRequestOptions resultHandler:^(UIImage * image, NSDictionary * _Nullable info) {
-                
-                ContentRecordImage *imageRecord = [[ContentRecordImage alloc]initWithType:ContentTypeImage];
-                imageRecord.image = image;
-                imageRecord.updated = YES;
-                [self.contentsArray addObject:imageRecord];
-                
-                self.imageViewCount++;
-                NSIndexPath *indexPath = [NSIndexPath indexPathForRow:self.contentsArray.count - 1 inSection:0];
-                
-                [self.tableView insertRowsAtIndexPaths:[NSArray arrayWithObject:indexPath] withRowAnimation:UITableViewRowAnimationBottom];
-
-                //[self.tableView scrollToRowAtIndexPath:indexPath atScrollPosition:UITableViewScrollPositionTop animated:YES];
-            }];
+        if (self.imageViewCount > 0) {
+#warning Upload Images
+//            [self uploadImages];
+        }else {
+            [self submitContents];
         }
-        [self.tableView endUpdates];
-        [self.addImageBtn setEnabled:YES];
-    }];
-}
-
-- (void)assetsPickerControllerDidCancel:(CTAssetsPickerController *)picker {
-    [self dismissViewControllerAnimated:YES completion:^{
-        [self.addImageBtn setEnabled:YES];
-    }];
-}
-
-#pragma mark - ImagePickerDelegate
-
-- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
-    if ([info objectForKey:UIImagePickerControllerOriginalImage]) {
-        UIImage* image=[info objectForKey:UIImagePickerControllerOriginalImage];
-        if (self.imageAction == IMAGE_ACTION_ADD) {
-            ContentRecordImage *imageRecord = [[ContentRecordImage alloc]initWithType:ContentTypeImage];
-            imageRecord.image = image;
-            imageRecord.updated = YES;
-            [self.contentsArray addObject:imageRecord];
-            
-            self.imageViewCount++;
-            NSIndexPath *indexPath = [NSIndexPath indexPathForRow:self.contentsArray.count - 1 inSection:0];
-            [self dismissViewControllerAnimated:YES completion:^{
-                [self.tableView insertRowsAtIndexPaths:[NSArray arrayWithObject:indexPath] withRowAnimation:UITableViewRowAnimationBottom];
-            }];
-            
-        }else if (self.imageAction == IMAGE_ACTION_EDIT) {
-            ContentRecordImage *imageRecord = [self.contentsArray objectAtIndex:self.indexPath.row];
-            imageRecord.image = image;
-            imageRecord.updated = YES;
-
-            [self dismissViewControllerAnimated:YES completion:^{
-                
-                //[self.tableView beginUpdates];
-                [self.tableView reloadRowsAtIndexPaths:@[self.indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
-                
-                //[self.tableView endUpdates];
-                //[self.tableView scrollToRowAtIndexPath:self.indexPath atScrollPosition:UITableViewScrollPositionTop animated:YES];
-            }];
-        }
-        self.imageAction = IMAGE_ACTION_NONE;
     }
 }
 
-- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
-    [self dismissViewControllerAnimated:YES completion:^{
-        self.imageAction = IMAGE_ACTION_NONE;
-    }];
+
+- (void)submitContents{
+    if (!self.progressHud) {
+        self.progressHud = [MBProgressHUD showHUDAddedTo:self.tableView animated:YES];
+    }
+    NSString *contentString = nil;
+    
+    for (int i = 0; i < self.contentsArray.count; i++) {
+        if (i == 0) {
+            contentString = @"[";
+        }
+        
+        ContentRecord *record = [self.contentsArray objectAtIndex:i];
+        if (record.contentString) {
+            contentString = [contentString stringByAppendingString:record.contentString];
+        }
+        
+        if (i < self.contentsArray.count - 1) {
+            contentString = [contentString stringByAppendingString:@","];
+        }else {
+            contentString = [contentString stringByAppendingString:@"]"];
+        }
+    }
+    if (contentString) {
+        NSLog(@"Content String:%@", contentString);
+        self.eventDic[@"content"] = contentString;
+    }
+    
+    [self.progressHud setLabelText:@"正在发布，请稍候"];
+#warning Submit to Server
+    /*[[EventStore sharedStore]submitEvent:self.eventDic completionHandler:^(NSDictionary *eventInfo, BOOL isSuccess, NSError *error) {
+        if (isSuccess) {
+            self.progressHud.customView = [[UIImageView alloc]initWithImage:[UIImage imageNamed:@"MBPCheckMark"]];
+            self.progressHud.mode = MBProgressHUDModeCustomView;
+            [self.progressHud setLabelText:@"发布成功"];
+            [self.progressHud hide:YES afterDelay:1.0];
+            self.progressHud.completionBlock = ^{
+                if (self.editMode == EditModeUpdate) {
+                    // Update Event details
+                    [self.delegate_event eventUpdated:nil];
+                }else {
+                    // Update Event list
+                    [self.delegate_event eventCreated:nil];
+                }
+                
+                [self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+            };
+            
+        }else {
+            [self.progressHud hide:YES afterDelay:0.0];
+            NSLog(@"create event error:%@", error);
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:nil message:@"提交活动信息失败" preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertAction *action = [UIAlertAction actionWithTitle:@"返回" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+                
+            }];
+            UIAlertAction *quit = [UIAlertAction actionWithTitle:@"放弃编辑" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+                [self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+            }];
+            [alert addAction:action];
+            [alert addAction:quit];
+            [self presentViewController:alert animated:YES completion:nil];
+        }
+    }];*/
 }
-
-
-
 
 
 #pragma mark - Table View Delegate
 
 /*- (BOOL)tableView:(UITableView *)tableView shouldIndentWhileEditingRowAtIndexPath:(NSIndexPath *)indexPath {
-    return YES;
-}*/
+ return YES;
+ }*/
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
     
@@ -396,7 +593,7 @@
 #pragma mark - Table view data source
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-
+    
     return 1;
 }
 
@@ -408,7 +605,6 @@
     return n;
 }
 
-
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     ContentRecord *record = [self.contentsArray objectAtIndex:indexPath.row];
     if (record.type == ContentTypeText) {
@@ -419,7 +615,7 @@
         
         [textCell setRecord:record];
         [self addDoneToolBarToKeyboard:textCell.textView];
-
+        
         textCell.contentCellDelegate = self;
         textCell.delegate = self;
         
@@ -434,7 +630,7 @@
         }
         
         [imageCell setRecord:record];
-
+        
         imageCell.contentCellDelegate = self;
         imageCell.delegate = self;
         
@@ -450,37 +646,37 @@
 
 
 /*- (void)leftSwipeForCell:(UISwipeGestureRecognizerWithData *)swipeGesture {
-    NSLog(@"left swipe");
-    if ([swipeGesture.userData isKindOfClass:[EditContentTextCell class]]) {
-        EditContentTextCell *textCell = swipeGesture.userData;
-        NSIndexPath *indexPath = [self.tableView indexPathForCell:textCell];
-        
-        //[self tableView:self.tableView willBeginEditingRowAtIndexPath:indexPath];
-        [self tableView:self.tableView commitEditingStyle:UITableViewCellEditingStyleDelete forRowAtIndexPath:indexPath];
-    }
-}*/
+ NSLog(@"left swipe");
+ if ([swipeGesture.userData isKindOfClass:[EditContentTextCell class]]) {
+ EditContentTextCell *textCell = swipeGesture.userData;
+ NSIndexPath *indexPath = [self.tableView indexPathForCell:textCell];
+ 
+ //[self tableView:self.tableView willBeginEditingRowAtIndexPath:indexPath];
+ [self tableView:self.tableView commitEditingStyle:UITableViewCellEditingStyleDelete forRowAtIndexPath:indexPath];
+ }
+ }*/
 
 
 // Override to support conditional editing of the table view.
 /*- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
-    // Return NO if you do not want the specified item to be editable.
-    return YES;
-}*/
+ // Return NO if you do not want the specified item to be editable.
+ return YES;
+ }*/
 
 
 
 /*// Override to support editing the table view.
-- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (editingStyle == UITableViewCellEditingStyleDelete) {
-        // Delete the row from the data source
-        NSLog(@"deleting cell from row %ld", indexPath.row);
-        [self deleteRowAtIndexPath:indexPath];
-        //[tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
-    } else if (editingStyle == UITableViewCellEditingStyleInsert) {
-        // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view
-        NSLog(@"Inserting cell to row %ld", indexPath.row);
-    }   
-}*/
+ - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
+ if (editingStyle == UITableViewCellEditingStyleDelete) {
+ // Delete the row from the data source
+ NSLog(@"deleting cell from row %ld", indexPath.row);
+ [self deleteRowAtIndexPath:indexPath];
+ //[tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
+ } else if (editingStyle == UITableViewCellEditingStyleInsert) {
+ // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view
+ NSLog(@"Inserting cell to row %ld", indexPath.row);
+ }
+ }*/
 
 
 
@@ -500,12 +696,12 @@
 
 
 /*
-// Override to support conditional rearranging of the table view.
-- (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
-    // Return NO if you do not want the item to be re-orderable.
-    return YES;
-}
-*/
+ // Override to support conditional rearranging of the table view.
+ - (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
+ // Return NO if you do not want the item to be re-orderable.
+ return YES;
+ }
+ */
 
 #pragma mark - EditContentCellDelegate
 
@@ -542,16 +738,16 @@
     if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
         UIAlertAction *libraryAction = [UIAlertAction actionWithTitle:@"选择图片" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
             imagePicker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-
-            /*ELCImagePickerController *elcPicker = [[ELCImagePickerController alloc]initImagePicker];
-            //elcPicker.maximumImagesCount = (EDIT_EVENT_MAX_IMAGE_COUNT - self.imageViewCount + 1); //Set the maximum number of images
-            elcPicker.maximumImagesCount = 1;
-            elcPicker.returnsOriginalImage = YES; //Only return the fullScreenImage, not the fullResolutionImage
-            elcPicker.returnsImage = YES; //Return UIimage if YES. If NO, only return asset location information
-            elcPicker.onOrder = YES; //For multiple image selection, display and return order of selected images
-            elcPicker.mediaTypes = @[(NSString *)kUTTypeImage, (NSString *)kUTTypeMovie]; //Supports image and movie types
             
-            elcPicker.imagePickerDelegate = self;*/
+            /*ELCImagePickerController *elcPicker = [[ELCImagePickerController alloc]initImagePicker];
+             //elcPicker.maximumImagesCount = (EDIT_EVENT_MAX_IMAGE_COUNT - self.imageViewCount + 1); //Set the maximum number of images
+             elcPicker.maximumImagesCount = 1;
+             elcPicker.returnsOriginalImage = YES; //Only return the fullScreenImage, not the fullResolutionImage
+             elcPicker.returnsImage = YES; //Return UIimage if YES. If NO, only return asset location information
+             elcPicker.onOrder = YES; //For multiple image selection, display and return order of selected images
+             elcPicker.mediaTypes = @[(NSString *)kUTTypeImage, (NSString *)kUTTypeMovie]; //Supports image and movie types
+             
+             elcPicker.imagePickerDelegate = self;*/
             
             
             [self presentViewController:imagePicker animated:YES completion:nil];
@@ -638,8 +834,6 @@
         
         MGSwipeButton *moveDown = [MGSwipeButton buttonWithTitle:@"下移" backgroundColor:[UIColor lightGrayColor] padding:padding callback:^BOOL(MGSwipeTableCell *sender) {
             //NSIndexPath *indexPath = [self.tableView indexPathForCell:sender];
-            
-            
             NSIndexPath *newIndexPath = [NSIndexPath indexPathForRow:indexPath.row + 1 inSection:0];
             [self moveRowFromIndexPath:indexPath toIndexPath:newIndexPath];
             
@@ -659,7 +853,7 @@
         
         NSMutableArray *buttons = [[NSMutableArray alloc]initWithCapacity:3];
         [buttons addObject:delete];
-
+        
         if (indexPath.row > 0) {
             NSLog(@"indexPath:%ld, adding move up btn", indexPath.row);
             [buttons addObject:moveUp];
@@ -687,6 +881,7 @@
     //EditContentImageCell *imageCell = (EditContentImageCell *)[self.tableView cellForRowAtIndexPath:self.indexPath];
     ContentRecordImage *imageRecord = [self.contentsArray objectAtIndex:self.indexPath.row];
     imageRecord.image = image;
+    imageRecord.uploaded = NO;
     
     [editor dismissViewControllerAnimated:YES completion:^{
         //[self.tableView beginUpdates];
@@ -713,17 +908,17 @@
     
     NSLog(@"After delete, content count:%ld", self.contentsArray.count);
     [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationLeft];
-
+    
 }
 
 - (void)moveRowFromIndexPath:(NSIndexPath *)fromIndexPath toIndexPath:(NSIndexPath *)toIndexPath{
-     NSLog(@"table view editing:%d", self.tableView.editing);
+    NSLog(@"table view editing:%d", self.tableView.editing);
     
     [self.tableView moveRowAtIndexPath:fromIndexPath toIndexPath:toIndexPath];
     
     [self tableView:self.tableView moveRowAtIndexPath:fromIndexPath toIndexPath:toIndexPath];
-
-
+    
+    
 }
 
 
@@ -749,61 +944,61 @@
 
 
 /*- (void)elcImagePickerController:(ELCImagePickerController *)picker didFinishPickingMediaWithInfo:(NSArray *)info {
-    
-    for (int i = 0; i < info.count; i++) {
-        NSDictionary *dict = info[i];
-        if ([dict objectForKey:UIImagePickerControllerMediaType] == ALAssetTypePhoto){
-            if ([dict objectForKey:UIImagePickerControllerOriginalImage]){
-                UIImage* image=[dict objectForKey:UIImagePickerControllerOriginalImage];
-                [self.selectedImages addObject:image];
-
-                //NSDictionary *imageContent = [[NSDictionary alloc]initWithObjectsAndKeys:image, @"content", @"image", @"type", nil];
-                ContentRecordImage *imageRecord = [self.contentsArray objectAtIndex:self.indexPath.row];
-                imageRecord.image = image;
-                imageRecord.updated = YES;
-                
-                //[self.contentsArray replaceObjectAtIndex:self.indexPath.row withObject:imageContent];
-                //NSLog(@"Replace ImageCell Info:%@", imageContent);
-                
-            } else {
-                NSLog(@"UIImagePickerControllerReferenceURL = %@", dict);
-            }
-        } else if ([dict objectForKey:UIImagePickerControllerMediaType] == ALAssetTypeVideo){
-            if ([dict objectForKey:UIImagePickerControllerOriginalImage]){
-                
-                
-            } else {
-            }
-        } else {
-            NSLog(@"Uknown asset type");
-        }
-    }
-    
-    [self dismissViewControllerAnimated:YES completion:^{
-        
-        [self.tableView beginUpdates];
-        [self.tableView reloadRowsAtIndexPaths:@[self.indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
-        
-        
-        [self.tableView endUpdates];
-        [self.tableView scrollToRowAtIndexPath:self.indexPath atScrollPosition:UITableViewScrollPositionTop animated:YES];
-    }];
-}
-
-- (void)elcImagePickerControllerDidCancel:(ELCImagePickerController *)picker {
-    [self dismissViewControllerAnimated:YES completion:^{
-        
-    }];
-}*/
+ 
+ for (int i = 0; i < info.count; i++) {
+ NSDictionary *dict = info[i];
+ if ([dict objectForKey:UIImagePickerControllerMediaType] == ALAssetTypePhoto){
+ if ([dict objectForKey:UIImagePickerControllerOriginalImage]){
+ UIImage* image=[dict objectForKey:UIImagePickerControllerOriginalImage];
+ [self.selectedImages addObject:image];
+ 
+ //NSDictionary *imageContent = [[NSDictionary alloc]initWithObjectsAndKeys:image, @"content", @"image", @"type", nil];
+ ContentRecordImage *imageRecord = [self.contentsArray objectAtIndex:self.indexPath.row];
+ imageRecord.image = image;
+ imageRecord.updated = YES;
+ 
+ //[self.contentsArray replaceObjectAtIndex:self.indexPath.row withObject:imageContent];
+ //NSLog(@"Replace ImageCell Info:%@", imageContent);
+ 
+ } else {
+ NSLog(@"UIImagePickerControllerReferenceURL = %@", dict);
+ }
+ } else if ([dict objectForKey:UIImagePickerControllerMediaType] == ALAssetTypeVideo){
+ if ([dict objectForKey:UIImagePickerControllerOriginalImage]){
+ 
+ 
+ } else {
+ }
+ } else {
+ NSLog(@"Uknown asset type");
+ }
+ }
+ 
+ [self dismissViewControllerAnimated:YES completion:^{
+ 
+ [self.tableView beginUpdates];
+ [self.tableView reloadRowsAtIndexPaths:@[self.indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+ 
+ 
+ [self.tableView endUpdates];
+ [self.tableView scrollToRowAtIndexPath:self.indexPath atScrollPosition:UITableViewScrollPositionTop animated:YES];
+ }];
+ }
+ 
+ - (void)elcImagePickerControllerDidCancel:(ELCImagePickerController *)picker {
+ [self dismissViewControllerAnimated:YES completion:^{
+ 
+ }];
+ }*/
 
 /*
-#pragma mark - Navigation
-
-// In a storyboard-based application, you will often want to do a little preparation before navigation
-- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
-    // Get the new view controller using [segue destinationViewController].
-    // Pass the selected object to the new view controller.
-}
-*/
+ #pragma mark - Navigation
+ 
+ // In a storyboard-based application, you will often want to do a little preparation before navigation
+ - (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
+ // Get the new view controller using [segue destinationViewController].
+ // Pass the selected object to the new view controller.
+ }
+ */
 
 @end

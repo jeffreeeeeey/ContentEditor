@@ -13,5 +13,6 @@
 @interface EditContentTableViewController : UITableViewController
 
 @property (nonatomic, strong) NSMutableDictionary *eventDic;
+@property (nonatomic, assign) EditMode editMode;
 
 @end

@@ -23,4 +23,9 @@ typedef NS_ENUM(NSInteger, ContentType){
     ContentTypeImage
 };
 
+typedef NS_ENUM(NSUInteger, EditMode) {
+    EditModeCreate,
+    EditModeUpdate
+};
+
 #endif /* Settings_h */
